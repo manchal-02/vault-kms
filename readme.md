@@ -18,9 +18,26 @@ sudo apt update && sudo apt install vault
 ```
 These commands will download the HashiCorp GPG key, configure the APT package manager to use it, update the package list, and then install Vault.
 
-## Step 2: Configure Vault
+## Step 2: Initialize Vault
+Initialize Vault by running the following command:
+```
+export VAULT_SKIP_VERIFY=true
+```
+```
+vault operator init
+```
+This command will output an unseal key and a root token. Keep these values secure, as they are essential for accessing Vault.
 
-Edit the Vault configuration file (usually located at /etc/vault/vault.hcl or a similar path) to include the necessary settings for using the custom KMS key. The relevant configuration options include:
+## Step 3: Unseal Vault
+Unseal Vault using the unseal key obtained from the previous step. You need to unseal Vault to enable its functionality:
+```
+vault operator unseal <unseal-key>
+```
+Repeat the above command for the required number of unseal keys (usually three keys).
+
+## Step 4: Configure Vault
+
+Edit the Vault configuration file (usually located at /etc/vault.d/vault.hcl or a similar path) to include the necessary settings for using the custom KMS key. The relevant configuration options include:
 ```
 storage "file" {
   path = "/opt/vault/data"
@@ -28,7 +45,9 @@ storage "file" {
 
 listener "tcp" {
   address = "127.0.0.1:8200"
-  tls_disable = 1
+  tls_disable = 0
+  tls_cert_file = "/etc/vault/tls/server.crt"
+  tls_key_file  = "/etc/vault/tls/server.key"
 }
 
 seal "awskms" {
@@ -37,8 +56,12 @@ seal "awskms" {
 }
 ```
 Replace region and awskms_key_id according to your configuration 
+After making changes run:
+```
+sudo systemctl restart vault
+```
 
-## Step 3: Enable and Configure the AWS KMS Secrets Engine
+## Step 5: Enable and Configure the AWS KMS Secrets Engine
 
 Enable the AWS KMS secrets engine and configure it to use your custom AWS KMS key.
 ```
@@ -48,11 +71,11 @@ vault secrets enable aws-kms
 vault write aws-kms/config/encryption_key aws_key_id=your-custom-kms-key-id
 ```
 
-## Step 4: Access Control
+## Step 6: Access Control
 
 Ensure that the IAM role or user associated with your EC2 instance has the necessary permissions to use the KMS key. The required permissions include kms:Encrypt and kms:Decrypt for the custom KMS key.
 
-## Step 5: Testing
+## Step 7: Testing
 
 Start Vault in dev mode for testing purposes:
 ```
@@ -61,13 +84,13 @@ vault server -dev
 
 Use the Vault CLI to encrypt and decrypt secrets with the custom KMS key:
 
-# Encrypt a secret:
+### Encrypt a secret:
 
 ```
 vault write aws-kms/encrypt/my-key plaintext=$(base64 <<< "my-secret-data")
 ```
 
-# Decrypt a secret:
+### Decrypt a secret:
 ```
 vault write aws-kms/decrypt/my-key ciphertext=<ciphertext>
 ```
